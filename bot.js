@@ -4,6 +4,7 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Create Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -19,40 +20,55 @@ const CHANNELS = {
   events: "1403669616890347593"     // Events
 };
 
+// Storage
 let storedPosts = {
   news: [],
   updates: [],
   events: []
 };
 
+// When bot is ready
 client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  for (const type in CHANNELS) {
-    const channel = await client.channels.fetch(CHANNELS[type]);
+  try {
+    for (const type in CHANNELS) {
+      const channel = await client.channels.fetch(CHANNELS[type]);
 
-    const messages = await channel.messages.fetch({ limit: 5 });
+      if (!channel) continue;
 
-    storedPosts[type] = messages
-      .filter(msg => !msg.author.bot)
-      .map(msg => ({
-        title: msg.content.split('\n')[0],
-        content: msg.content,
-        date: msg.createdAt
-      }))
-      .reverse();
+      const messages = await channel.messages.fetch({ limit: 5 });
+
+      storedPosts[type] = messages
+        .filter(msg => !msg.author.bot)
+        .map(msg => ({
+          title: msg.content.split('\n')[0] || "No title",
+          content: msg.content,
+          date: msg.createdAt
+        }))
+        .reverse();
+    }
+
+    console.log("Messages loaded successfully.");
+  } catch (err) {
+    console.error("Error loading messages:", err);
   }
-
-  console.log("Messages loaded.");
 });
 
-// API endpoint for your website
-app.get('/api/posts', (req, res) => {
+// Root route (required for Render port detection)
+app.get("/", (req, res) => {
+  res.send("Discord Bot API is running.");
+});
+
+// API endpoint for FluxCP
+app.get("/api/posts", (req, res) => {
   res.json(storedPosts);
 });
 
+// Start Express server
 app.listen(PORT, () => {
-  console.log("API running on port " + PORT);
+  console.log(`Server running on port ${PORT}`);
 });
 
+// Login bot
 client.login(process.env.BOT_TOKEN);
