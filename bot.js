@@ -4,7 +4,6 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Create Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -13,62 +12,88 @@ const client = new Client({
   ]
 });
 
-// Your Channel IDs
+// Channel IDs
 const CHANNELS = {
-  news: "1392002771649298447",      // Announcements
-  updates: "1392002771649298448",   // Change-logs
-  events: "1403669616890347593"     // Events
+  news: "1392002771649298447",
+  updates: "1392002771649298448",
+  events: "1403669616890347593"
 };
 
-// Storage
 let storedPosts = {
   news: [],
   updates: [],
   events: []
 };
 
-// When bot is ready
+// Utility: clean message formatting
+function cleanText(text) {
+  return text
+    .replace(/@everyone/g, "")
+    .replace(/@here/g, "")
+    .replace(/<a?:\w+:\d+>/g, "") // remove custom emojis
+    .replace(/[#*_`]/g, "") // remove markdown symbols
+    .trim();
+}
+
+// Load last 5 messages on startup
+async function loadInitialMessages() {
+  for (const type in CHANNELS) {
+    const channel = await client.channels.fetch(CHANNELS[type]);
+    const messages = await channel.messages.fetch({ limit: 5 });
+
+    storedPosts[type] = messages
+      .filter(msg => !msg.author.bot)
+      .map(msg => ({
+        title: cleanText(msg.content.split('\n')[0]) || "No title",
+        date: msg.createdAt
+      }))
+      .reverse();
+  }
+
+  console.log("Initial messages loaded.");
+}
+
 client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+  await loadInitialMessages();
+});
 
-  try {
-    for (const type in CHANNELS) {
-      const channel = await client.channels.fetch(CHANNELS[type]);
+// 🔥 LIVE UPDATE LISTENER
+client.on('messageCreate', (message) => {
+  if (message.author.bot) return;
 
-      if (!channel) continue;
+  for (const type in CHANNELS) {
+    if (message.channel.id === CHANNELS[type]) {
 
-      const messages = await channel.messages.fetch({ limit: 5 });
+      const newPost = {
+        title: cleanText(message.content.split('\n')[0]) || "No title",
+        date: message.createdAt
+      };
 
-      storedPosts[type] = messages
-        .filter(msg => !msg.author.bot)
-        .map(msg => ({
-          title: msg.content.split('\n')[0] || "No title",
-          content: msg.content,
-          date: msg.createdAt
-        }))
-        .reverse();
+      storedPosts[type].unshift(newPost);
+
+      // Keep only last 5
+      if (storedPosts[type].length > 5) {
+        storedPosts[type].pop();
+      }
+
+      console.log(`New ${type} post stored.`);
     }
-
-    console.log("Messages loaded successfully.");
-  } catch (err) {
-    console.error("Error loading messages:", err);
   }
 });
 
-// Root route (required for Render port detection)
+// Health route (required by Render)
 app.get("/", (req, res) => {
-  res.send("Discord Bot API is running.");
+  res.send("Discord Live API Running");
 });
 
-// API endpoint for FluxCP
+// API for FluxCP
 app.get("/api/posts", (req, res) => {
   res.json(storedPosts);
 });
 
-// Start Express server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Login bot
 client.login(process.env.BOT_TOKEN);
