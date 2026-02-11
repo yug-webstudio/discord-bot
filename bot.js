@@ -1,8 +1,12 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
+const cors = require('cors');
 
 const app = express();
+app.use(cors()); // THIS FIXES YOUR ERROR
+
 const PORT = process.env.PORT || 3000;
+
 
 const client = new Client({
   intents: [
@@ -97,3 +101,4 @@ app.listen(PORT, () => {
 });
 
 client.login(process.env.BOT_TOKEN);
+
